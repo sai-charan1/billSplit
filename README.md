@@ -4,8 +4,8 @@ Fair Split turns a receipt photo + plain-English description into a reconciled p
 
 ## Live links
 
-- API: `https://your-api.onrender.com`
-- Frontend: `https://your-app.vercel.app`
+- **App:** [https://bill-split-theta.vercel.app/](https://bill-split-theta.vercel.app/)
+- **API:** [https://billsplit-l46n.onrender.com](https://billsplit-l46n.onrender.com) · [OpenAPI `/docs`](https://billsplit-l46n.onrender.com/docs)
 
 ## Assignment contract endpoint
 
@@ -22,7 +22,7 @@ Fair Split turns a receipt photo + plain-English description into a reconciled p
 Example:
 
 ```bash
-curl -X POST https://your-api.onrender.com/split \
+curl -X POST https://billsplit-l46n.onrender.com/split \
   -H "Content-Type: application/json" \
   -d '{
     "receipt_base64": "<base64 image bytes>",
