@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fair Split</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Fair Split</h1>
+        <p class="subtitle">
+          Upload a restaurant bill and describe who had what. Tax, service, and discounts are
+          split fairly — with full reconciliation.
+        </p>
+      </header>
+
+      <section class="panel">
+        <label class="field">
+          <span>Receipt image</span>
+          <input type="file" id="receipt" accept="image/*" />
+        </label>
+
+        <label class="field">
+          <span>Who had what (plain English)</span>
+          <textarea
+            id="description"
+            rows="5"
+            placeholder="Four of us: Aman, Priya, Karan, Sara. The Gulab Jamun was shared just by Priya and Karan. Everything else was common to all four. Priya paid."
+          ></textarea>
+        </label>
+
+        <div class="actions">
+          <button id="submit" class="primary">Split bill</button>
+        </div>
+
+        <p id="status" class="status" aria-live="polite"></p>
+      </section>
+
+      <section id="results" class="results hidden">
+        <div class="summary-grid">
+          <div class="card">
+            <h3>Grand total</h3>
+            <p id="grandTotal" class="big-number">—</p>
+          </div>
+          <div class="card">
+            <h3>Paid by</h3>
+            <p id="paidBy" class="big-number">—</p>
+          </div>
+          <div class="card">
+            <h3>Reconciliation</h3>
+            <p id="reconciliation">—</p>
+          </div>
+          <div class="card">
+            <h3>Bill health</h3>
+            <p id="billHealth" class="big-number">—</p>
+          </div>
+        </div>
+
+        <div class="actions" id="shareActions" style="margin-bottom: 1rem;">
+          <button id="copyShare" class="secondary" type="button">Copy WhatsApp summary</button>
+        </div>
+
+        <h2>Why each person owes this</h2>
+        <ul id="explanations" class="explain-list"></ul>
+
+        <h2>Per person</h2>
+        <div class="table-wrap">
+          <table id="personTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Items</th>
+                <th>Subtotal</th>
+                <th>Service</th>
+                <th>Tax</th>
+                <th>Discount</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h2>Settle up</h2>
+        <ul id="settleUp" class="settle-list"></ul>
+
+        <div class="meta-columns">
+          <div>
+            <h2>Assumptions</h2>
+            <ul id="assumptions" class="meta-list"></ul>
+          </div>
+          <div>
+            <h2>Flags</h2>
+            <ul id="flags" class="meta-list flags"></ul>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
