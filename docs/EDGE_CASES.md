@@ -1,139 +1,65 @@
-# Edge Cases
+# Edge cases
 
-Each entry: input → handling → verified?
+How I handled tricky inputs while building this.
 
----
+### No payer in the description
 
-## 1. No payer stated
+If nobody is named as payer → `paid_by` is null, `settle_up` is empty, and a flag explains that settle-up cannot be finalized.
 
-**Input:** `"A and B shared the tea."` (no “X paid”)  
-**Handling:** `paid_by: null`, flag `"No payer stated in description — settle-up cannot be finalized"`, `settle_up: []`  
-**Verified:** Yes — unit test `test_no_payer_flags_and_empty_settle_up`
+### Item in description but not on the bill
 
----
+e.g. description says “sushi” but the receipt has no match → flagged; that item is not charged to anyone.
 
-## 2. Item in description not on receipt
+### Line items do not match printed subtotal
 
-**Input:** Description mentions “Sushi”; receipt only has Tea ₹100  
-**Handling:** Flag `"Item 'Sushi' mentioned in description but not found on receipt"`; item cost not allocated  
-**Verified:** Yes — unit test `test_item_not_on_bill_is_flagged`
+OCR/vision sometimes sums items differently from the printed subtotal. The split still runs on extracted items, but `reconciliation.matches_bill` stays false and a flag shows the gap.
 
----
+### “Everything else” / catch-all
 
-## 3. Line items ≠ printed subtotal
+Named items go to the people you specify; remaining lines are split equally across everyone in the group.
 
-**Input:** OCR sums items to ₹980, bill prints subtotal ₹1000  
-**Handling:** Flag with exact delta; split proceeds on extracted items; `matches_bill: false` if reconciliation fails  
-**Verified:** Yes — logic in `compute_split`; manual scenario in assignment example
+### Shared item for a subset only
 
----
+e.g. two beers for two people → that line amount is divided only between them, not the whole table.
 
-## 4. “Everything else” / catch-all assignment
+### Bill-level discount (coupon %)
 
-**Input:** R2 — Gulab Jamun for Priya+Karan; everything else for all four  
-**Handling:** First assign named items; catch-all splits remaining line items equally among listed consumers  
-**Verified:** Yes — unit test `test_r2_gulab_jamun_split`
+Discount is stored as a negative amount and allocated in proportion to each person’s food subtotal.
 
----
+### Fuzzy item names
 
-## 5. Shared item across subset
+Description says “pasta”, receipt says “Penne Arrabiata” → matched with `rapidfuzz`; logged in `assumptions`.
 
-**Input:** R3 — two beers for Ishaan and Rohit only  
-**Handling:** Item amount ÷ number of consumers on that assignment only  
-**Verified:** Yes — R3 sample reconciles to ₹1720
+### Unassigned receipt lines
 
----
+If the description does not mention some items, those lines are split equally among all diners (with an assumption note).
 
-## 6. Bill-level discount (percentage coupon)
+### Rounding
 
-**Input:** R4 — WELCOME15 −15% (−₹228)  
-**Handling:** `discount_share` allocated proportionally to each person’s food subtotal (negative integer)  
-**Verified:** Yes — R4 sample + `test_discount_allocated_proportionally`
+Per-person amounts are rounded to whole rupees; small remainder is adjusted so the total still matches the bill grand total.
 
----
+### Equal split phrasing
 
-## 7. No service charge on bill
+Handles wording like “all of us ate everything” or “split equally among 3” without needing exact item names.
 
-**Input:** Receipt with subtotal + GST only, service = 0  
-**Handling:** Extract `service_charge: 0` from receipt; no assumption of 5% unless printed  
-**Verified:** Partial — code path handles 0; not tested on live OCR image
+### Duplicate rows, different prices
 
----
+Some hotel/restaurant bills repeat the same dish with different rates. Items are pooled by name before splitting.
 
-## 8. Fuzzy item name match
+### Quantity per person
 
-**Input:** Description says “pasta”; receipt says “Penne Arrabiata”  
-**Handling:** `rapidfuzz` token match ≥55; assumption logged: `'pasta' matched to 'Penne Arrabiata'`  
-**Verified:** Yes — R1 sample description
+e.g. “2 biryanis each for A and B” → quantity is applied per consumer, not as a blind equal split of one line.
 
----
+### Service tax (S.Tax) on liquor-style bills
 
-## 9. Half / fractional share
+When service tax is in the footer but not in `service_charge`, normalization tries to pick it up from the printed breakdown.
 
-**Input:** `"Priya and I shared the pasta"` → fraction 0.5 each  
-**Handling:** LLM outputs `fraction: 0.5`; calculator assigns 50% of line amount split among consumers  
-**Verified:** Partial — schema supports it; manual test via custom description recommended
+### Provider failure
 
----
+If Groq/Gemini hit quota or errors, the pipeline tries the next provider, then OCR + rules. It returns flags rather than made-up totals.
 
-## 10. Unassigned receipt items
+### Not handled in v1
 
-**Input:** Description names some items but omits others  
-**Handling:** Unassigned items split equally among all diners; assumption logged per item  
-**Verified:** Yes — code path in `_build_ledgers`
-
----
-
-## 11. Grand total mismatch after tax/service/round-off
-
-**Input:** Extracted components don’t sum to printed grand total  
-**Handling:** Flag with computed vs printed total; still returns best-effort split  
-**Verified:** Yes — flag in `compute_split`
-
----
-
-## 12. Rupee rounding / paise leftover
-
-**Input:** Any bill with fractional tax allocation  
-**Handling:** Round each person to nearest rupee; distribute remainder by largest fractional parts; payer absorbs final gap — stated in assumptions  
-**Verified:** Yes — all R1–R4 sum to exact grand total
-
----
-
-## 13. Payer not among diners
-
-**Input:** `"Ravi paid"` but people list is `[Neha, Sameer]`  
-**Handling:** Flag `"Payer 'Ravi' is not among identified diners"`; empty settle-up  
-**Verified:** Partial — code path exists; add integration test if needed
-
----
-
-## 14. Ambiguous pronoun “I”
-
-**Input:** `"I had the beer. Neha paid."` without a name for “I”  
-**Handling:** LLM prompt instructs to flag; appears in `flags` / `assumptions`  
-**Verified:** Partial — depends on LLM output; flagged rather than guessed
-
----
-
-## 15. Multiple payers mentioned
-
-**Input:** `"Priya paid half, Karan paid half"`  
-**Handling:** Not fully supported — would flag ambiguity; single `paid_by` field in contract  
-**Verified:** No — chosen not to handle split payment in v1; would flag
-
----
-
-## 16. Tips not on receipt
-
-**Input:** Description says “add ₹200 tip” but receipt has no tip line  
-**Handling:** Not allocated — would appear as unreconciled gap in flags if mentioned  
-**Verified:** No — out of scope for fairness rules; flag-only approach documented
-
----
-
-## 17. Provider outage fallback
-
-**Input:** Vision provider rate-limit / outage during `/split`  
-**Handling:** Falls back in order: Groq → Gemini → local OCR + text model → rule parser; returns flags rather than fabricated totals  
-**Verified:** Yes — tested via forced provider failures and fallback tests
+- Two payers splitting the bill (“Priya paid half, Karan paid half”)
+- Cash tip mentioned only in text, not on the receipt
+- Payer name not in the diner list (flagged, no settle-up)

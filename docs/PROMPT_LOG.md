@@ -1,27 +1,24 @@
-# Prompt Log — Fair Split
+# Prompt log
 
-| # | Change | Why |
-|---|--------|-----|
-| 1 | Single prompt for receipt + description + totals | Model returned wrong GST and invented a settle-up payer |
-| 2 | Split into receipt extraction vs description parsing prompts | Vision task and NLP task need different schemas; reduces hallucinated math |
-| 3 | Added strict JSON schema + `response_mime_type: application/json` | Fewer parse failures from Gemini |
-| 4 | Receipt prompt: explicit discount sign rule (negative) | Model returned +228 for WELCOME15 instead of −228 |
-| 5 | Description prompt: output `assignments[]` with `consumers` + `fraction` | Enables deterministic equal/half splits in code |
-| 6 | Added fuzzy item matching (`rapidfuzz`) post-parse | “pasta” ↔ “Penne Arrabiata” without re-prompting |
-| 7 | Moved all rupee arithmetic to Python calculator | Model mis-added R3 line items by ₹20 in early tests |
-| 8 | Added reconciliation + mandatory flags | Surfaces line-sum ≠ subtotal and missing payer instead of guessing |
-| 9 | Temperature 0.1 | More stable extraction on repeated runs |
+Changes I made to prompts while iterating on the project.
 
-## Did the model do the arithmetic?
+| Step | What I changed | Reason |
+|------|----------------|--------|
+| 1 | Started with one big prompt for receipt + description + totals | Model got GST wrong and invented a payer |
+| 2 | Split into receipt extraction vs description parsing | Different tasks, cleaner JSON, less mixed-up math |
+| 3 | Forced JSON output (`application/json`) | Fewer broken responses from Gemini |
+| 4 | Told the model discount must be negative when it reduces the bill | It returned +228 for a coupon once |
+| 5 | Description output: `assignments` with `consumers` and `fraction` | Lets Python do equal/half splits reliably |
+| 6 | Fuzzy match on item names after parse (`rapidfuzz`) | “pasta” vs “Penne Arrabiata” without re-asking the model |
+| 7 | Moved all rupee math to `calculator.py` | Model was off by tens of rupees on line totals |
+| 8 | Always return reconciliation + flags | Surfaces mismatch instead of silent wrong answers |
+| 9 | Temperature 0.1 | More stable on repeated runs |
 
-**No.** The model only:
-1. Extracts structured receipt fields (items, subtotal, service, GST, discount, grand total)
-2. Parses the description into people, item assignments, and payer
+## Does the model do the arithmetic?
 
-**All money math runs in Python** (`calculator.py`):
-- Per-person subtotals from item assignments
-- Service + tax + discount allocated proportionally to subtotal
-- Rupee rounding with documented absorption rule
-- Settle-up and reconciliation checks
+No. It only:
 
-**Why:** LLMs routinely mis-sum line items and tax. For a fintech-style bill split, deterministic code is the only acceptable source of totals. The model’s job is unstructured → structured; code’s job is structured → correct rupees.
+1. Extracts receipt fields (items, subtotal, service, GST, discount, grand total)
+2. Parses the description into people, assignments, and payer
+
+Everything involving money is in Python: item allocation, tax/service/discount share, rounding, settle-up, and checks against the printed total.

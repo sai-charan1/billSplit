@@ -1,91 +1,46 @@
 # Fair Split
 
-Fair Split turns a receipt photo + plain-English description into a reconciled per-person split with tax/service/discount allocation and settle-up.
+Upload a restaurant bill photo, describe who ate what in plain English, and get a per-person split with tax/service/discount and settle-up.
 
-## Live links
+**Try it:** [bill-split-theta.vercel.app](https://bill-split-theta.vercel.app/)  
+**API:** [billsplit-l46n.onrender.com](https://billsplit-l46n.onrender.com) · [docs](https://billsplit-l46n.onrender.com/docs)
 
-- **App:** [https://bill-split-theta.vercel.app/](https://bill-split-theta.vercel.app/)
-- **API:** [https://billsplit-l46n.onrender.com](https://billsplit-l46n.onrender.com) · [OpenAPI `/docs`](https://billsplit-l46n.onrender.com/docs)
+No login needed — open the app and upload a receipt.
 
-## Assignment contract endpoint
+---
 
-`POST /split` returns the exact required shape:
+## How it works
 
-- `per_person`
-- `grand_total`
-- `reconciliation`
-- `paid_by`
-- `settle_up`
-- `assumptions`
-- `flags`
+1. Vision model reads the receipt (items, subtotal, GST, service, discount, grand total).
+2. Another pass parses your description (people, who shared which item, who paid).
+3. All rupee math runs in Python — the model does not calculate final amounts.
+4. If something does not add up, the API returns flags instead of guessing.
 
-Example:
-
-```bash
-curl -X POST https://billsplit-l46n.onrender.com/split \
-  -H "Content-Type: application/json" \
-  -d '{
-    "receipt_base64": "<base64 image bytes>",
-    "description": "Four of us: Aman, Priya, Karan, Sara. The Gulab Jamun was shared just by Priya and Karan. Everything else was common to all four. Priya paid."
-  }'
-```
-
-## Extra product endpoint (not required, useful for demo)
-
-`POST /split/enriched` includes:
-
-- bill health score (`A–D`, `0–100`)
-- per-person explanation strings
-- WhatsApp-ready share message
-- model/provider used
-
-This is for better UX and reviewer visibility. Core grading should use `/split`.
+---
 
 ## Tech stack
 
-- Backend: FastAPI + Pydantic
-- Vision/Text extraction: Groq (primary), Gemini (fallback)
-- Deterministic split math: Python (`calculator.py`)
-- Frontend: Vite + vanilla JS
-- OCR fallback: Tesseract (`pytesseract`)
+- **Backend:** FastAPI, Pydantic
+- **LLM:** Groq (primary), Gemini (fallback), rule-based parser as last resort
+- **Frontend:** Vite + vanilla JS
+- **Deploy:** Render (API), Vercel (UI)
 
-## Project structure
+---
 
-```text
-backend/app/
-  main.py               # API routes
-  pipeline.py           # end-to-end orchestration
-  llm.py                # provider chain + parsing
-  prompts.py            # centralized LLM prompts
-  receipt_normalize.py  # rate-vs-total, S.Tax, GST normalization
-  description_rules.py  # deterministic fallback parser
-  calculator.py         # all rupee math + reconciliation
-  bill_health.py        # trust score + checks
-  explain.py            # per-person explanations/share text
-  groq_client.py
-  gemini_client.py
-frontend/
-docs/
-  EDGE_CASES.md
-  PROMPT_LOG.md
-  AI_FAILURES.md
-  STANDOUT.md
-```
+## Run locally
 
-## Local run
-
-### Backend
+**Backend**
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp ../.env.example ../.env
+cp ../.env.example ../.env   # add GROQ_API_KEY (and optionally GEMINI_API_KEY)
 uvicorn app.main:app --reload --app-dir .
 ```
 
-### Frontend
+**Frontend**
 
 ```bash
 cd frontend
@@ -93,75 +48,49 @@ npm install
 npm run dev
 ```
 
-Frontend URL: `http://localhost:5173`  
-API URL: `http://localhost:8000`
+API: `http://localhost:8000` · UI: `http://localhost:5173`
 
-## Environment variables
+Set `VITE_API_URL` in `.env` if the frontend should point at a remote API.
 
-Use `.env.example`.
+---
 
-Required (recommended):
-- `GROQ_API_KEY` (free key from `https://console.groq.com/keys`)
+## API
 
-Optional fallback:
-- `GEMINI_API_KEY` (from `https://aistudio.google.com/app/apikey`)
-
-## Deployment (free)
-
-- API: Render (Dockerfile included)
-- Frontend: Vercel (`frontend/` root)
-
-## Is demo sample required?
-
-No. The assignment does not require demo sample selectors or hardcoded sample bills.  
-This repo is submission-focused and processes uploaded images directly.
-
-## How I tested
-
-I tested this project at three levels: unit tests, edge-case scenario tests, and manual UI checks.
-
-### 1) Automated tests
+Main endpoint: `POST /split`
 
 ```bash
-cd backend
-source .venv/bin/activate
-pytest -q
+curl -X POST https://billsplit-l46n.onrender.com/split \
+  -H "Content-Type: application/json" \
+  -d '{
+    "receipt_base64": "<base64 image>",
+    "description": "Four of us: Aman, Priya, Karan, Sara. Gulab Jamun only for Priya and Karan. Rest split equally. Priya paid."
+  }'
 ```
 
-Current suite covers:
-- deterministic calculator arithmetic and reconciliation
-- no-payer behavior + settle-up constraints
-- pooled duplicate item names (different rates/rows)
-- quantity assignments (`2 each`)
-- exclusion patterns (`all except X`)
-- equal split language (`all of us ate all`, `split all into 3`)
-- receipt normalization:
-  - line totals vs rate×qty mismatch
-  - service tax (`S.Tax`) inference
-  - CGST+SGST composition
-- contract schema checks for `/split`
+Response includes `per_person`, `grand_total`, `reconciliation`, `paid_by`, `settle_up`, `assumptions`, and `flags`.
 
-### 2) Edge-case receipts validated
+There is also `POST /split/enriched` for the UI (bill health score, short explanations, share text).
 
-- **Cedarstay Hotels** style bills: repeated item rows with different per-unit pricing.
-- **Liquor Street** style bills: rightmost line totals include markup + `S.Tax` footer.
-- Natural-language variations:
-  - lowercase names without commas
-  - "3 of us went ..."
-  - "all ate all split into 3"
+---
 
-### 3) Manual product checks
+## Testing
 
-- upload image + description flow
-- per-person table consistency
-- settle-up generation when payer exists
-- flag surfacing on ambiguity/mismatch
-- enriched endpoint rendering (bill health, explanations, share message)
+```bash
+cd backend && source .venv/bin/activate && pytest -q
+```
 
-## Submission artifacts
+I covered calculator logic, reconciliation, duplicate line items on the same bill, quantity splits (“2 each”), “all except X”, equal-split wording, and receipt normalization (rate×qty vs printed total, S.Tax, CGST+SGST). I also checked the live app with a few real bill photos.
 
-- `docs/EDGE_CASES.md`
-- `docs/PROMPT_LOG.md`
-- `docs/AI_FAILURES.md`
-- `docs/STANDOUT.md`
+More detail:
 
+- [Edge cases](docs/EDGE_CASES.md)
+- [Prompt changes](docs/PROMPT_LOG.md)
+- [Where the model was wrong](docs/AI_FAILURES.md)
+
+---
+
+## Notes
+
+- First request on Render free tier can be slow after idle (~30–60s).
+- Blurry or cropped receipts may misread line amounts — check `flags` in the response.
+- Only one payer is supported in settle-up for now.

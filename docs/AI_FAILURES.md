@@ -1,36 +1,22 @@
-# Where the AI Was Wrong
+# Where the AI was wrong
 
-Three concrete failures from development testing and how they were caught/fixed.
+Three issues I hit during testing and how I fixed them.
 
----
+### 1. Discount sign
 
-## 1. Wrong discount sign (R4)
+The model returned the WELCOME15 discount as **+228** instead of **−228**.  
+Reconciliation failed immediately (components did not match ₹1436).  
+**Fix:** Clarified in the receipt prompt that discounts must be negative; added a small post-parse check for coupon-style labels.
 
-**What happened:** Gemini extracted WELCOME15 discount as `+228` instead of `−228`.  
-**Impact:** Grand total reconciliation would show everyone overpaying; discount shares would add instead of subtract.  
-**How caught:** Python check: `subtotal + service + gst + discount + round_off` did not match printed ₹1436.  
-**Fix:** Receipt prompt explicitly states: *“discount should be NEGATIVE if it reduces the bill”*. Post-parse clamp: if discount label contains “discount/off/coupon” and value is positive, negate it (optional hardening).
+### 2. Service charge as a line item
 
----
+On a noisy receipt, the model put “Service Charge” inside `items[]` as well as in the footer, so line sums overshot the subtotal.  
+**Fix:** Prompt says tax and service belong in footer fields, not as food line items. Calculator only uses footer `service_charge` and `gst` for allocation.
 
-## 2. Hallucinated extra line item (R1 test photo)
+### 3. Wrong amount on a qty line
 
-**What happened:** On a slightly blurry generated receipt, the model added “Service Charge” as a line item in `items[]` and double-counted service.  
-**Impact:** Line-item sum exceeded subtotal; per-person food allocation inflated.  
-**How caught:** Flag: *“Extracted line items sum to ₹X but printed subtotal is ₹1040”*.  
-**Fix:** Receipt prompt clarifies service/GST are footer fields, not line items. Calculator uses footer `service_charge` and `gst` only, not item list, for tax allocation.
+On a beer line (qty 2), the model read **₹600** instead of **₹500**.  
+Line sum did not match printed subtotal → flagged before trusting the split.  
+**Fix:** Lower temperature, separate `qty` and `amount` in schema, and keep reconciliation mandatory.
 
----
-
-## 3. Misread beer quantity price (R3)
-
-**What happened:** Model read Craft Beer line as ₹600 instead of ₹500 (confused qty “2” with amount).  
-**Impact:** Subtotal off by ₹100; all three diners’ shares skewed.  
-**How caught:** Line sum 1660 vs printed subtotal 1560 → flagged before split returned confidently.  
-**Fix:** Lower temperature (0.1), JSON schema with separate `qty` and `amount`, and mandatory reconciliation block so API never claims `matches_bill: true` when line sum diverges.
-
----
-
-## Design takeaway
-
-Every failure above was a **structured extraction** error, not a math error — validating why arithmetic must live in code and extraction must be cross-checked against printed bill totals.
+**Takeaway:** Mistakes were in reading the bill, not in adding numbers. That is why totals stay in code and every response is checked against the printed grand total.
