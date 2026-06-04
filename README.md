@@ -81,12 +81,6 @@ cd backend && source .venv/bin/activate && pytest -q
 
 I covered calculator logic, reconciliation, duplicate line items on the same bill, quantity splits (“2 each”), “all except X”, equal-split wording, and receipt normalization (rate×qty vs printed total, S.Tax, CGST+SGST). I also checked the live app with a few real bill photos.
 
-More detail:
-
-- [Edge cases](docs/EDGE_CASES.md)
-- [Prompt changes](docs/PROMPT_LOG.md)
-- [Where the model was wrong](docs/AI_FAILURES.md)
-
 ---
 
 ## Notes
